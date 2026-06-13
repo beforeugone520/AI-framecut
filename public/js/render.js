@@ -67,5 +67,12 @@ export function renderResult(result, container) {
 
   html += `</tbody></table></div>`;
 
+  if (result.transcript) {
+    html += `<details class="transcript">
+      <summary>🎙️ 音频转写全文（真实语音识别）</summary>
+      <pre>${esc(result.transcript)}</pre>
+    </details>`;
+  }
+
   container.innerHTML = html;
 }

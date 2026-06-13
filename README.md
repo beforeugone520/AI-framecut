@@ -38,7 +38,24 @@ node server.js
 | **Anthropic Claude** | 抽帧 | 浏览器按时间戳抽取关键帧做视觉分析；音频由画面线索推断 | <https://console.anthropic.com/settings/keys> |
 | **OpenAI GPT** | 抽帧 | 同上，支持自定义 Base URL（兼容第三方网关） | <https://platform.openai.com/api-keys> |
 
-> 「音频」列：仅 **Gemini** 能真正听到声音；Claude / OpenAI 抽帧模式下音频由画面（字幕、口型、场景）推断。要最完整的音频拉片，优先用 Gemini。
+> 「音频」列：**Gemini** 原生就能听到声音。Claude / OpenAI 抽帧模式默认靠画面推断音频，但可在「高级设置」勾选 **「转写真实音频」** 接入真实语音识别（见下）。
+
+### 抽帧模式接入真实音频转写（可选）
+
+抽帧模式下，在「高级设置 → 转写真实音频」勾选后：
+
+1. 浏览器本地用 Web Audio 解码音轨，重采样为 16kHz 单声道 WAV（超长自动分段）。
+2. 经本地服务转发给转写引擎，得到**带时间戳**的转写。
+3. 转写连同关键帧一起喂给分析模型，模型据此把**真实台词/旁白**写进每个镜头的「音频」列；配乐与音效仍结合画面判断。
+
+转写引擎二选一：
+
+| 引擎 | 模型 | 说明 |
+| --- | --- | --- |
+| **OpenAI Whisper** | `whisper-1` | `verbose_json` 分段时间戳，最准；OpenAI 抽帧用户可复用同一个 Key |
+| **Gemini** | `gemini-2.5-flash` | 原生听音频；让「Claude 分析 + Gemini 转写」也成立 |
+
+转写 Key 与分析引擎**同源时可留空**（自动复用上方 Key）；无音轨 / 纯音乐 / 转写失败会自动降级为画面推断，不中断分析。导出的 Markdown 会附带「音频转写全文」。
 
 默认模型可在界面里随时改成你账号可用的模型 ID：
 `gemini-2.5-flash`（默认，可换 `gemini-2.5-pro` 获得更深入分析）、`claude-sonnet-4-6`、`gpt-4o`。

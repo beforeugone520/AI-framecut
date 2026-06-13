@@ -62,6 +62,27 @@
             <input id="maxFrames" type="range" min="8" max="80" step="4" value="48" />
             <span class="hint">帧越多越细，但耗时与费用越高</span>
           </label>
+
+          <div class="field" id="transcribeField">
+            <label class="check-row">
+              <input id="transcribeOn" type="checkbox" />
+              <span class="field-label">转写真实音频，填入「音频」列（仅抽帧模式）</span>
+            </label>
+            <span class="hint">浏览器本地提取音轨 → 语音识别（带时间戳）→ 真实台词写入分镜，而非靠画面推断</span>
+            <div id="transcribeOpts" hidden>
+              <label class="field">
+                <span class="field-label">转写引擎</span>
+                <select id="transcribeEngine">
+                  <option value="openai">OpenAI Whisper（时间戳最准）</option>
+                  <option value="gemini">Gemini（原生听音频）</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field-label">转写 API Key</span>
+                <input id="transcribeKey" type="password" autocomplete="off" spellcheck="false" placeholder="与分析引擎同源可留空，自动复用上方 Key" />
+              </label>
+            </div>
+          </div>
         </details>
 
         <h2 class="panel-title">2 · 上传视频</h2>

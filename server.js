@@ -10,6 +10,7 @@ import { serveStatic } from './lib/static.js';
 import { analyzeWithGemini } from './lib/providers/gemini.js';
 import { analyzeWithClaude } from './lib/providers/claude.js';
 import { analyzeWithOpenAI } from './lib/providers/openai.js';
+import { transcribe } from './lib/providers/transcribe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -27,6 +28,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && pathname === '/api/frames/analyze') {
       return await handleFrames(req, res);
+    }
+    if (req.method === 'POST' && pathname === '/api/transcribe') {
+      return await handleTranscribe(req, res);
     }
     if (req.method === 'GET' && pathname === '/api/health') {
       return sendJson(res, 200, { ok: true });
@@ -76,19 +80,36 @@ async function handleFrames(req, res) {
     return sendJson(res, 400, { error: '请求体不是合法 JSON' });
   }
 
-  const { provider, model, apiKey, baseUrl, frames, focus, meta } = payload;
+  const apiKey = req.headers['x-api-key']; // Key 只走 header，不入 body
+  const { provider, model, baseUrl, frames, focus, meta, transcript } = payload;
   if (!Array.isArray(frames) || frames.length === 0) {
     return sendJson(res, 400, { error: '缺少抽帧数据' });
   }
 
   let result;
   if (provider === 'claude') {
-    result = await analyzeWithClaude({ apiKey, model, frames, focus, meta });
+    result = await analyzeWithClaude({ apiKey, model, frames, focus, meta, transcript });
   } else if (provider === 'openai') {
-    result = await analyzeWithOpenAI({ apiKey, model, frames, focus, meta, baseUrl });
+    result = await analyzeWithOpenAI({ apiKey, model, frames, focus, meta, baseUrl, transcript });
   } else {
     return sendJson(res, 400, { error: `不支持的 provider: ${provider}` });
   }
+  sendJson(res, 200, result);
+}
+
+// 音频转写：raw WAV body + query(engine/model/baseUrl) + header x-api-key
+async function handleTranscribe(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const q = url.searchParams;
+  const apiKey = req.headers['x-api-key'];
+  const engine = q.get('engine') || 'openai';
+  const model = q.get('model') || '';
+  const baseUrl = q.get('baseUrl') || '';
+
+  const wavBuffer = await readRawBody(req, MAX_VIDEO_BYTES);
+  if (!wavBuffer.length) return sendJson(res, 400, { error: '未收到音频数据' });
+
+  const result = await transcribe({ engine, apiKey, model, baseUrl, wavBuffer });
   sendJson(res, 200, result);
 }
 

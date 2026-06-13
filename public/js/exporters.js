@@ -42,6 +42,10 @@ export function toMarkdown(result, meta = {}) {
     );
   }
   lines.push('');
+
+  if (result.transcript) {
+    lines.push('', `## 音频转写全文`, '', '```', result.transcript, '```', '');
+  }
   return lines.join('\n');
 }
 

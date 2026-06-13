@@ -29,13 +29,21 @@ export const PROVIDERS = {
   }
 };
 
+export const TRANSCRIBE_ENGINES = {
+  openai: { label: 'OpenAI Whisper', defaultModel: 'whisper-1', provider: 'openai' },
+  gemini: { label: 'Gemini', defaultModel: 'gemini-2.5-flash', provider: 'gemini' }
+};
+
 const defaults = {
   provider: 'gemini',
   models: {},      // { gemini: '...', claude: '...', openai: '...' }
   keys: {},        // { gemini: '...', ... }
   baseUrl: '',
   focus: '',
-  maxFrames: 48
+  maxFrames: 48,
+  transcribeOn: false,
+  transcribeEngine: 'openai',
+  transcribeKey: ''   // 留空则在同源时复用分析引擎的 key
 };
 
 export function load() {

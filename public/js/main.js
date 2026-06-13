@@ -1,7 +1,8 @@
 import { $, fmtTime, fmtBytes, download, toast, baseName } from './util.js';
-import { load, save, PROVIDERS } from './store.js';
+import { load, save, PROVIDERS, TRANSCRIBE_ENGINES } from './store.js';
 import { loadVideoMeta, extractFrames } from './extract.js';
-import { analyzeVideo, analyzeFrames } from './api.js';
+import { extractAudioSegments, formatTranscript } from './audio.js';
+import { analyzeVideo, analyzeFrames, transcribeAudio } from './api.js';
 import { renderResult } from './render.js';
 import { toMarkdown, toCSV, toJSON } from './exporters.js';
 
@@ -16,6 +17,11 @@ const els = {
   framesField: $('#framesField'),
   maxFrames: $('#maxFrames'),
   maxFramesVal: $('#maxFramesVal'),
+  transcribeField: $('#transcribeField'),
+  transcribeOn: $('#transcribeOn'),
+  transcribeOpts: $('#transcribeOpts'),
+  transcribeEngine: $('#transcribeEngine'),
+  transcribeKey: $('#transcribeKey'),
   dropzone: $('#dropzone'),
   fileInput: $('#fileInput'),
   videoMeta: $('#videoMeta'),
@@ -44,7 +50,11 @@ function initUI() {
   els.focus.value = settings.focus || '';
   els.maxFrames.value = settings.maxFrames || 48;
   els.maxFramesVal.textContent = els.maxFrames.value;
+  els.transcribeOn.checked = !!settings.transcribeOn;
+  els.transcribeEngine.value = settings.transcribeEngine || 'openai';
+  els.transcribeKey.value = settings.transcribeKey || '';
   applyProvider();
+  applyTranscribe();
 }
 
 function applyProvider() {
@@ -55,7 +65,13 @@ function applyProvider() {
   els.apiKey.value = settings.keys[p] || '';
   els.apiKey.placeholder = `粘贴 ${conf.label} API Key`;
   els.baseUrlField.hidden = !conf.needsBaseUrl;
-  els.framesField.style.display = conf.mode === 'frames' ? '' : 'none';
+  const isFrames = conf.mode === 'frames';
+  els.framesField.style.display = isFrames ? '' : 'none';
+  els.transcribeField.style.display = isFrames ? '' : 'none';
+}
+
+function applyTranscribe() {
+  els.transcribeOpts.hidden = !els.transcribeOn.checked;
 }
 
 /* ── 持久化 ── */
@@ -66,6 +82,9 @@ function persist() {
   settings.baseUrl = els.baseUrl.value.trim();
   settings.focus = els.focus.value.trim();
   settings.maxFrames = Number(els.maxFrames.value);
+  settings.transcribeOn = els.transcribeOn.checked;
+  settings.transcribeEngine = els.transcribeEngine.value;
+  settings.transcribeKey = els.transcribeKey.value.trim();
   save(settings);
 }
 
@@ -103,6 +122,10 @@ async function runAnalysis() {
 
   const provider = els.provider.value;
   const conf = PROVIDERS[provider];
+  if (!conf) {
+    setStatus('error', `不支持的分析引擎：${provider}`);
+    return;
+  }
   const apiKey = els.apiKey.value.trim();
   const model = els.model.value.trim() || conf.defaultModel;
   const focus = els.focus.value.trim();
@@ -125,13 +148,19 @@ async function runAnalysis() {
         maxFrames: Number(els.maxFrames.value),
         onProgress: (i, total) => setStatus('working', `正在抽取关键帧 ${i}/${total}…`)
       });
-      setStatus('working', `已抽取 ${frames.length} 帧，正在调用 ${conf.label} 分析…`);
+
+      const transcript = els.transcribeOn.checked
+        ? await runTranscription(provider, apiKey)
+        : '';
+
+      setStatus('working', `已抽取 ${frames.length} 帧${transcript ? '（含真实音频转写）' : ''}，正在调用 ${conf.label} 分析…`);
       result = await analyzeFrames({
         provider, model, apiKey,
         baseUrl: els.baseUrl.value.trim(),
-        frames, focus,
+        frames, focus, transcript,
         meta: { ...currentMeta, filename: currentFile.name }
       });
+      if (transcript) result.transcript = transcript;
     }
 
     if (!result || !Array.isArray(result.shots) || result.shots.length === 0) {
@@ -148,6 +177,56 @@ async function runAnalysis() {
   } finally {
     setBusy(false);
   }
+}
+
+// 提取音频 → 分段转写 → 按全局偏移合并 → 返回带时间戳的转写文本
+async function runTranscription(analysisProvider, analysisKey) {
+  const engineKey = els.transcribeEngine.value;
+  const engineConf = TRANSCRIBE_ENGINES[engineKey];
+  if (!engineConf) throw new Error(`不支持的音频转写引擎：${engineKey}`);
+
+  let key = els.transcribeKey.value.trim();
+  if (!key && engineConf.provider === analysisProvider) key = analysisKey;
+  if (!key) key = settings.keys[engineConf.provider] || '';
+  if (!key) {
+    throw new Error(`音频转写需要 ${engineConf.label} 的 API Key（在「高级设置」里填写，或留空以复用同源分析 Key）`);
+  }
+
+  setStatus('working', '正在提取音频…');
+  let audio = null;
+  try {
+    audio = await extractAudioSegments(currentFile, {
+      onProgress: (i, total) => setStatus('working', `正在提取音频 ${i}/${total} 段…`)
+    });
+  } catch {
+    audio = null;
+  }
+  if (!audio || !audio.segments.length) {
+    toast(audio?.silent ? '音频近乎静音，跳过转写' : '未检测到可用音轨，跳过转写');
+    return '';
+  }
+
+  const merged = [];
+  for (let i = 0; i < audio.segments.length; i++) {
+    setStatus('working', `正在转写音频 ${i + 1}/${audio.segments.length} 段…`);
+    const seg = audio.segments[i];
+    const r = await transcribeAudio({
+      engine: engineKey,
+      model: engineConf.defaultModel,
+      apiKey: key,
+      baseUrl: engineKey === 'openai' ? els.baseUrl.value.trim() : '',
+      blob: seg.blob
+    });
+    for (const s of (r.segments || [])) {
+      merged.push({ start: (s.start || 0) + seg.offset, end: (s.end || 0) + seg.offset, text: s.text });
+    }
+  }
+  if (!merged.length) {
+    toast('音频转写为空（可能无人声/纯音乐）');
+    return '';
+  }
+  merged.sort((a, b) => a.start - b.start); // 防止引擎返回乱序分段
+  return formatTranscript(merged);
 }
 
 function showResult(result) {
@@ -204,6 +283,9 @@ function bind() {
     els.maxFramesVal.textContent = els.maxFrames.value;
     persist();
   });
+  els.transcribeOn.addEventListener('change', () => { applyTranscribe(); persist(); });
+  els.transcribeEngine.addEventListener('change', persist);
+  els.transcribeKey.addEventListener('input', persist);
 
   els.dropzone.addEventListener('click', () => els.fileInput.click());
   els.dropzone.addEventListener('keydown', (e) => {
