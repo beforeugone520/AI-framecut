@@ -1,7 +1,8 @@
 // 按给定时间点从视频抽取镜头缩略图（用于可视化分镜表）。
 // 与抽帧分析独立：无论 Gemini 原生模式还是抽帧模式，只要原视频还在浏览器里就能用。
+import { abortError } from './util.js';
 
-export async function captureThumbnails(file, times, { maxDim = 200, quality = 0.6, onProgress } = {}) {
+export async function captureThumbnails(file, times, { maxDim = 200, quality = 0.6, onProgress, signal } = {}) {
   const video = document.createElement('video');
   video.preload = 'auto';
   video.muted = true;
@@ -29,6 +30,7 @@ export async function captureThumbnails(file, times, { maxDim = 200, quality = 0
 
   const out = [];
   for (let i = 0; i < times.length; i++) {
+    if (signal?.aborted) { URL.revokeObjectURL(video.src); throw abortError(); }
     let t = times[i];
     if (!Number.isFinite(t)) t = 0;
     if (Number.isFinite(duration)) t = Math.max(0, Math.min(duration - 0.05, t));

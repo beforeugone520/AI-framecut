@@ -1,12 +1,15 @@
 // 从视频文件中提取音频 → 重采样为 16kHz 单声道 WAV，并按时长分段（规避转写服务的单文件大小限制）。
 // 全部在浏览器本地完成；无音轨 / 解码失败时返回 null，由上层优雅降级。
 
+import { abortError } from './util.js';
+
 const TARGET_RATE = 16000; // Whisper 推荐采样率
 
-export async function extractAudioSegments(file, { segmentSec = 600, maxMinutes = 60, onProgress } = {}) {
+export async function extractAudioSegments(file, { segmentSec = 600, maxMinutes = 60, onProgress, signal } = {}) {
   const AC = window.AudioContext || window.webkitAudioContext;
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!AC || !OAC) return null;
+  if (signal?.aborted) throw abortError();
 
   let arrayBuf;
   try {
@@ -41,9 +44,11 @@ export async function extractAudioSegments(file, { segmentSec = 600, maxMinutes 
     src.start();
     rendered = await offline.startRendering();
   } catch {
+    if (signal?.aborted) throw abortError(); // 取消要传播，而非当作“无音轨”
     return null;
   }
 
+  if (signal?.aborted) throw abortError();
   const data = rendered.getChannelData(0); // Float32Array, mono, 16k
   if (isSilent(data)) return { segments: [], duration: decoded.duration, silent: true };
 

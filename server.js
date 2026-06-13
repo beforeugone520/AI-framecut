@@ -143,6 +143,11 @@ function numOrUndef(v) {
   return Number.isFinite(n) ? n : undefined;
 }
 
+// 慢速客户端保护：请求头 60s，整体请求 15 分钟（容纳大视频本地上传），keep-alive 65s
+server.headersTimeout = 60 * 1000;
+server.requestTimeout = 15 * 60 * 1000;
+server.keepAliveTimeout = 65 * 1000;
+
 server.listen(PORT, () => {
   console.log(`\n  🎬 AI-Framecut 已启动`);
   console.log(`  ➜  本地访问: http://localhost:${PORT}\n`);

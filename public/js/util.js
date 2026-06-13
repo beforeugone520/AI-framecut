@@ -54,6 +54,13 @@ export function escAttr(str) {
   return esc(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// 统一的“已取消”错误（name=AbortError，便于上层识别为用户取消而非失败）
+export function abortError() {
+  const e = new Error('已取消');
+  e.name = 'AbortError';
+  return e;
+}
+
 // 给常见的大模型 API 错误附上可操作的中文建议
 export function friendlyError(msg) {
   const m = String(msg ?? '');
@@ -69,6 +76,8 @@ export function friendlyError(msg) {
     hint = '触发限流或额度不足，请稍后重试或检查账户额度。';
   } else if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('econnrefused') || low.includes('network error')) {
     hint = '网络请求失败，请确认本地服务在运行、网络可访问对应 API。';
+  } else if (m.includes('超时') || low.includes('timeout') || /\btimed?\s*out\b/i.test(m)) {
+    hint = '请求超时，请检查网络、稍后重试，或换用更短的视频。';
   }
   return hint ? `${m}\n💡 ${hint}` : m;
 }

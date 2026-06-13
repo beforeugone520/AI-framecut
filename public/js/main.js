@@ -47,6 +47,7 @@ let busy = false;
 let viewGen = 0; // 视图代号：换视频/重新分析时自增，作废在途的缩略图填充
 let currentThumbs = []; // 当前结果的缩略图 dataURL 缓存（表格与画廊共用）
 let resultMatchesPreview = false; // 当前结果是否对应已载入的 #preview 视频（历史载入时为 false）
+let abortController = null; // 贯穿当前分析的取消控制器
 
 /* ── 初始化 UI ── */
 function initUI() {
@@ -108,7 +109,8 @@ async function handleFile(file) {
     currentMeta = { duration: meta.duration, width: meta.width, height: meta.height };
     currentObjectUrl = meta.objectUrl;
 
-    // 换视频：作废旧结果，避免旧分镜行点击后跳错视频、旧缩略图错填
+    // 换视频：取消任何在途分析/缩略图，作废旧结果，避免旧分镜行点击后跳错视频、旧缩略图错填
+    if (abortController) abortController.abort();
     viewGen++;
     lastResult = null;
     els.resultBody.hidden = true;
@@ -151,28 +153,33 @@ async function runAnalysis() {
     return;
   }
 
+  if (abortController) abortController.abort(); // 作废上一次（理论上不会重叠，防御）
+  abortController = new AbortController();
+  const signal = abortController.signal;
+
   setBusy(true);
   try {
     let result;
     if (conf.mode === 'video') {
       setStatus('working', '正在上传视频并调用 Gemini 分析（视频较大时可能需要 1～3 分钟）…');
-      result = await analyzeVideo({ file: currentFile, model, apiKey, focus, meta: currentMeta });
+      result = await analyzeVideo({ file: currentFile, model, apiKey, focus, meta: currentMeta, signal });
     } else {
       setStatus('working', '正在抽取关键帧…');
       const frames = await extractFrames(currentFile, {
         maxFrames: Number(els.maxFrames.value),
+        signal,
         onProgress: (i, total) => setStatus('working', `正在抽取关键帧 ${i}/${total}…`)
       });
 
       const transcript = els.transcribeOn.checked
-        ? await runTranscription(provider, apiKey)
+        ? await runTranscription(provider, apiKey, signal)
         : '';
 
       setStatus('working', `已抽取 ${frames.length} 帧${transcript ? '（含真实音频转写）' : ''}，正在调用 ${conf.label} 分析…`);
       result = await analyzeFrames({
         provider, model, apiKey,
         baseUrl: els.baseUrl.value.trim(),
-        frames, focus, transcript,
+        frames, focus, transcript, signal,
         meta: { ...currentMeta, filename: currentFile.name }
       });
       if (transcript) result.transcript = transcript;
@@ -192,15 +199,21 @@ async function runAnalysis() {
     } catch { /* 历史保存失败不影响主流程 */ }
     setStatus('done', `分析完成 · 共 ${result.shots.length} 个镜头`);
   } catch (err) {
-    console.error(err);
-    setStatus('error', friendlyError(err.message || String(err)));
+    if (signal.aborted) {
+      // 仅当本次分析的外部信号被取消时才算“已取消”（超时虽也产生 AbortError，但属于错误）
+      setStatus(null);
+      toast('已取消分析');
+    } else {
+      console.error(err);
+      setStatus('error', friendlyError(err.message || String(err)));
+    }
   } finally {
     setBusy(false);
   }
 }
 
 // 提取音频 → 分段转写 → 按全局偏移合并 → 返回带时间戳的转写文本
-async function runTranscription(analysisProvider, analysisKey) {
+async function runTranscription(analysisProvider, analysisKey, signal) {
   const engineKey = els.transcribeEngine.value;
   const engineConf = TRANSCRIBE_ENGINES[engineKey];
   if (!engineConf) throw new Error(`不支持的音频转写引擎：${engineKey}`);
@@ -216,9 +229,11 @@ async function runTranscription(analysisProvider, analysisKey) {
   let audio = null;
   try {
     audio = await extractAudioSegments(currentFile, {
+      signal,
       onProgress: (i, total) => setStatus('working', `正在提取音频 ${i}/${total} 段…`)
     });
-  } catch {
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e; // 取消要向上传播，而非当作“无音轨”
     audio = null;
   }
   if (!audio || !audio.segments.length) {
@@ -237,7 +252,8 @@ async function runTranscription(analysisProvider, analysisKey) {
         model: engineConf.defaultModel,
         apiKey: key,
         baseUrl: engineKey === 'openai' ? els.baseUrl.value.trim() : '',
-        blob: seg.blob
+        blob: seg.blob,
+        signal
       });
       done++;
       setStatus('working', `正在转写音频 ${done}/${total} 段…`);
@@ -247,6 +263,7 @@ async function runTranscription(analysisProvider, analysisKey) {
         text: s.text
       }));
     } catch (e) {
+      if (signal?.aborted || e?.name === 'AbortError') throw e; // 取消：中止整个转写
       done++;
       failed++;
       setStatus('working', `正在转写音频 ${done}/${total} 段（有 ${failed} 段失败，已跳过）…`);
@@ -295,9 +312,9 @@ async function fillThumbnails(result, gen) {
   const times = computeShotTimes(result.shots, result.meta?.duration);
   let thumbs;
   try {
-    thumbs = await captureThumbnails(fileAtStart, times, { maxDim: 200 });
+    thumbs = await captureThumbnails(fileAtStart, times, { maxDim: 200, signal: abortController?.signal });
   } catch {
-    return; // 缩略图失败不影响主结果
+    return; // 缩略图失败/取消不影响主结果
   }
   // 期间若换了视频或重新分析，则放弃本次填充，避免错填到新结果
   if (gen !== viewGen || currentFile !== fileAtStart) return;
@@ -481,8 +498,10 @@ function setStatus(type, msg) {
 
 function setBusy(b) {
   busy = b;
-  els.analyzeBtn.disabled = b || !currentFile;
-  els.analyzeBtn.textContent = b ? '分析中…' : '开始拉片分析';
+  // 分析中按钮保持可点击，作为「取消」入口
+  els.analyzeBtn.disabled = b ? false : !currentFile;
+  els.analyzeBtn.textContent = b ? '取消分析' : '开始拉片分析';
+  els.analyzeBtn.classList.toggle('is-cancel', b);
 }
 
 function escAttr(s) {
@@ -522,7 +541,10 @@ function bind() {
     if (file) handleFile(file);
   });
 
-  els.analyzeBtn.addEventListener('click', runAnalysis);
+  els.analyzeBtn.addEventListener('click', () => {
+    if (busy) { abortController?.abort(); } // 分析中点击=取消
+    else runAnalysis();
+  });
   els.exportBar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-export]');
     if (btn) handleExport(btn.dataset.export);

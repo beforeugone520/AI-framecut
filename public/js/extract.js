@@ -1,4 +1,5 @@
 // 视频元数据读取 + 按时间戳抽取关键帧（用于 Claude / OpenAI 抽帧模式）。
+import { abortError } from './util.js';
 
 export function loadVideoMeta(file) {
   return new Promise((resolve, reject) => {
@@ -11,26 +12,37 @@ export function loadVideoMeta(file) {
         duration: video.duration,
         width: video.videoWidth,
         height: video.videoHeight,
-        objectUrl: video.src
+        objectUrl: video.src // 调用方成功后接管，负责后续 revoke
       });
     };
-    video.onerror = () => reject(new Error('无法读取该视频，请换一个文件或格式'));
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src); // 失败路径释放，避免泄漏
+      reject(new Error('无法读取该视频，请换一个文件或格式'));
+    };
   });
 }
 
-// 抽帧：返回 [{ time, dataUrl }]，maxDim 控制帧分辨率，onProgress(i, total)
-export async function extractFrames(file, { maxFrames = 48, maxDim = 640, onProgress } = {}) {
+// 抽帧：返回 [{ time, dataUrl }]，maxDim 控制帧分辨率，onProgress(i, total)，signal 支持取消
+export async function extractFrames(file, { maxFrames = 48, maxDim = 640, onProgress, signal } = {}) {
   const video = document.createElement('video');
   video.preload = 'auto';
   video.muted = true;
   video.playsInline = true;
   video.src = URL.createObjectURL(file);
 
+  // 用 finally 统一释放 ObjectURL：无论解码失败、抽帧抛错、取消还是正常结束都不泄漏
+  try {
+    return await doExtract(video, { maxFrames, maxDim, onProgress, signal });
+  } finally {
+    URL.revokeObjectURL(video.src);
+  }
+}
+
+async function doExtract(video, { maxFrames, maxDim, onProgress, signal }) {
   await once(video, 'loadeddata', 'error', '无法解码视频用于抽帧');
 
   const duration = video.duration;
   if (!Number.isFinite(duration) || duration <= 0) {
-    URL.revokeObjectURL(video.src);
     throw new Error('视频时长无效，无法抽帧');
   }
 
@@ -51,6 +63,7 @@ export async function extractFrames(file, { maxFrames = 48, maxDim = 640, onProg
 
   const frames = [];
   for (let i = 0; i < count; i++) {
+    if (signal?.aborted) throw abortError();
     // 在每个区间中点取帧，避免取到纯黑首帧
     const t = Math.min(duration - 0.05, ((i + 0.5) / count) * duration);
     await seek(video, t);
@@ -60,8 +73,7 @@ export async function extractFrames(file, { maxFrames = 48, maxDim = 640, onProg
     onProgress?.(i + 1, count);
   }
 
-  URL.revokeObjectURL(video.src);
-  return frames;
+  return frames; // ObjectURL 由 extractFrames 的 finally 释放
 }
 
 function seek(video, time) {
