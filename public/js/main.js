@@ -5,7 +5,8 @@ import { extractAudioSegments, formatTranscript } from './audio.js';
 import { captureThumbnails } from './thumbs.js';
 import { analyzeVideo, analyzeFrames, transcribeAudio } from './api.js';
 import { renderResult, computeShotTimes } from './render.js';
-import { toMarkdown, toCSV, toJSON, buildReplicationPrompt } from './exporters.js';
+import { toMarkdown, toCSV, toJSON, toSRT, buildReplicationPrompt } from './exporters.js';
+import { saveResult, listHistory, loadResult, deleteResult } from './history.js';
 
 const els = {
   provider: $('#provider'),
@@ -32,7 +33,8 @@ const els = {
   status: $('#status'),
   empty: $('#empty'),
   resultBody: $('#resultBody'),
-  exportBar: $('#exportBar')
+  exportBar: $('#exportBar'),
+  historyBox: $('#historyBox')
 };
 
 const settings = load();
@@ -43,6 +45,8 @@ let lastResult = null;
 let lastExportMeta = null;
 let busy = false;
 let viewGen = 0; // 视图代号：换视频/重新分析时自增，作废在途的缩略图填充
+let currentThumbs = []; // 当前结果的缩略图 dataURL 缓存（表格与画廊共用）
+let resultMatchesPreview = false; // 当前结果是否对应已载入的 #preview 视频（历史载入时为 false）
 
 /* ── 初始化 UI ── */
 function initUI() {
@@ -57,6 +61,7 @@ function initUI() {
   els.transcribeKey.value = settings.transcribeKey || '';
   applyProvider();
   applyTranscribe();
+  renderHistory();
 }
 
 function applyProvider() {
@@ -180,6 +185,11 @@ async function runAnalysis() {
     lastResult = result;
     lastExportMeta = { filename: currentFile.name, engine: `${conf.label} · ${model}` };
     showResult(result);
+    try {
+      const { saved } = saveResult(result, lastExportMeta);
+      if (!saved) toast('本机历史空间不足，本次结果未保存到历史');
+      renderHistory();
+    } catch { /* 历史保存失败不影响主流程 */ }
     setStatus('done', `分析完成 · 共 ${result.shots.length} 个镜头`);
   } catch (err) {
     console.error(err);
@@ -259,6 +269,7 @@ async function runTranscription(analysisProvider, analysisKey) {
 
 function showResult(result) {
   viewGen++;
+  resultMatchesPreview = true; // 刚分析的就是当前 #preview 视频
   els.empty.hidden = true;
   els.resultBody.hidden = false;
   els.exportBar.hidden = false;
@@ -266,8 +277,19 @@ function showResult(result) {
   fillThumbnails(result, viewGen); // 异步填充，不阻塞结果展示
 }
 
-// 按镜头起始时间抽取缩略图，填进分镜表第一列。gen 用于作废过期填充。
+// 从历史载入：不抽缩略图（原视频可能已不在），提示需重新上传以联动
+function showResultFromHistory(result) {
+  resultMatchesPreview = false; // 历史结果与当前 #preview 视频未必一致，禁止跳转
+  els.empty.hidden = true;
+  els.resultBody.hidden = false;
+  els.exportBar.hidden = false;
+  renderResult(result, els.resultBody);
+  toast('已载入历史结果（缩略图与跳转需重新上传同一视频）');
+}
+
+// 按镜头起始时间抽取缩略图，填进分镜表与画廊。gen 用于作废过期填充。
 async function fillThumbnails(result, gen) {
+  currentThumbs = [];
   const fileAtStart = currentFile;
   if (!fileAtStart || !Array.isArray(result.shots) || !result.shots.length) return;
   const times = computeShotTimes(result.shots, result.meta?.duration);
@@ -279,12 +301,20 @@ async function fillThumbnails(result, gen) {
   }
   // 期间若换了视频或重新分析，则放弃本次填充，避免错填到新结果
   if (gen !== viewGen || currentFile !== fileAtStart) return;
+  currentThumbs = thumbs;
+  applyThumbs(thumbs);
+}
+
+// 把缩略图 dataURL 填到表格 .thumb 与画廊 .gthumb（两视图共用同一批图）
+function applyThumbs(thumbs) {
   thumbs.forEach((url, i) => {
     if (!url) return;
-    const el = els.resultBody.querySelector(`.thumb[data-thumb="${i}"]`);
-    if (el) {
-      el.style.backgroundImage = `url(${url})`;
-      el.classList.add('has-img');
+    for (const sel of [`.thumb[data-thumb="${i}"]`, `.gthumb[data-gthumb="${i}"]`]) {
+      const el = els.resultBody.querySelector(sel);
+      if (el) {
+        el.style.backgroundImage = `url(${url})`;
+        el.classList.add('has-img');
+      }
     }
   });
 }
@@ -294,9 +324,10 @@ function seekTo(row) {
   const t = parseFloat(row.dataset.start);
   if (!Number.isFinite(t)) return;
   if (!els.preview.src) { toast('请先上传视频'); return; }
+  if (!resultMatchesPreview) { toast('该结果来自历史，请重新上传同一视频后再跳转'); return; }
   els.preview.currentTime = t;
   els.preview.play?.().catch(() => {});
-  els.resultBody.querySelectorAll('.shot-row.active').forEach((r) => r.classList.remove('active'));
+  els.resultBody.querySelectorAll('.shot-row.active, .shot-card.active').forEach((r) => r.classList.remove('active'));
   row.classList.add('active');
   els.preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -311,10 +342,52 @@ function onResultClick(e) {
     }
     return;
   }
-  // 仅缩略图 / 镜号触发跳转；文字单元格用于编辑，不跳转
+  const vt = e.target.closest('.vt');
+  if (vt) { setView(vt.dataset.view); return; }
+
+  const chip = e.target.closest('.szchip');
+  if (chip) { chip.classList.toggle('active'); applyFilter(); return; }
+
+  // 跳转：画廊里整张卡片(.shot-card)，表格里仅缩略图/镜号(.seek→所属 .shot-row)
+  const card = e.target.closest('.shot-card');
+  if (card) { seekTo(card); return; }
   if (e.target.closest('.seek')) {
     const row = e.target.closest('.shot-row');
     if (row) seekTo(row);
+  }
+}
+
+function setView(view) {
+  const table = els.resultBody.querySelector('#tableView');
+  const gallery = els.resultBody.querySelector('#galleryView');
+  if (!table || !gallery) return;
+  const isGallery = view === 'gallery';
+  table.hidden = isGallery;
+  gallery.hidden = !isGallery;
+  els.resultBody.querySelectorAll('.vt').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+}
+
+// 关键词 + 景别筛选：仅隐藏不重排，data-row/data-card 索引不变，编辑同步安全
+function applyFilter() {
+  if (!lastResult || !Array.isArray(lastResult.shots)) return;
+  const search = els.resultBody.querySelector('#shotSearch');
+  const kw = (search?.value || '').trim().toLowerCase();
+  const activeSizes = [...els.resultBody.querySelectorAll('.szchip.active')].map((b) => b.dataset.size);
+  let visible = 0;
+  lastResult.shots.forEach((s, i) => {
+    const hay = `${s.shot_number} ${s.shot_size} ${s.movement} ${s.visual} ${s.on_screen_text} ${s.audio}`.toLowerCase();
+    const show = (!kw || hay.includes(kw)) && (!activeSizes.length || activeSizes.includes(s.shot_size));
+    if (show) visible++;
+    const row = els.resultBody.querySelector(`.shot-row[data-row="${i}"]`);
+    const card = els.resultBody.querySelector(`.shot-card[data-card="${i}"]`);
+    if (row) row.style.display = show ? '' : 'none';
+    if (card) card.style.display = show ? '' : 'none';
+  });
+  const label = els.resultBody.querySelector('#shotCount');
+  if (label) {
+    label.textContent = visible === lastResult.shots.length
+      ? `共 ${visible} 个镜头`
+      : `筛选出 ${visible} / ${lastResult.shots.length} 个镜头`;
   }
 }
 
@@ -343,7 +416,58 @@ function handleExport(kind) {
     download(`${name}.csv`, toCSV(lastResult), 'text/csv;charset=utf-8');
   } else if (kind === 'json') {
     download(`${name}.json`, toJSON(lastResult), 'application/json;charset=utf-8');
+  } else if (kind === 'srt') {
+    const srt = toSRT(lastResult);
+    if (!srt) { toast('无可导出的字幕'); return; }
+    download(`${name}.srt`, srt, 'application/x-subrip;charset=utf-8');
   }
+}
+
+/* ── 历史记录 ── */
+function renderHistory() {
+  if (!els.historyBox) return;
+  const list = listHistory();
+  if (!list.length) { els.historyBox.hidden = true; els.historyBox.innerHTML = ''; return; }
+  els.historyBox.hidden = false;
+  const items = list.map((e) => `
+    <li class="hist-item" data-id="${e.id}">
+      <button class="hist-open" data-id="${e.id}" title="载入此结果">
+        <span class="hist-name">${escAttr(e.filename)}</span>
+        <span class="hist-sub">${escAttr(e.engine)} · ${e.shotCount} 镜 · ${fmtDate(e.ts)}</span>
+      </button>
+      <button class="hist-del" data-del="${e.id}" title="删除">✕</button>
+    </li>`).join('');
+  els.historyBox.innerHTML = `<details open><summary>📁 历史分析（最近 ${list.length} 条 · 本机保存）</summary><ul class="hist-list">${items}</ul></details>`;
+}
+
+function onHistoryClick(e) {
+  const del = e.target.closest('[data-del]');
+  if (del) { deleteResult(del.dataset.del); renderHistory(); return; }
+  const open = e.target.closest('.hist-open');
+  if (open) {
+    const result = loadResult(open.dataset.id);
+    if (!result || typeof result !== 'object' || !Array.isArray(result.shots)) {
+      toast('历史数据已损坏，无法载入');
+      deleteResult(open.dataset.id);
+      renderHistory();
+      return;
+    }
+    const entry = listHistory().find((x) => x.id === open.dataset.id);
+    lastResult = result;
+    lastExportMeta = { filename: entry?.filename || '历史结果', engine: entry?.engine || '' };
+    viewGen++;            // 作废任何在途缩略图
+    currentThumbs = [];
+    showResultFromHistory(result);
+    setStatus('done', `已载入历史结果 · ${result.shots?.length || 0} 个镜头`);
+  }
+}
+
+function fmtDate(ts) {
+  try {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getMonth() + 1}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  } catch { return ''; }
 }
 
 /* ── 状态/工具 ── */
@@ -403,13 +527,22 @@ function bind() {
     const btn = e.target.closest('button[data-export]');
     if (btn) handleExport(btn.dataset.export);
   });
+  if (els.historyBox) els.historyBox.addEventListener('click', onHistoryClick);
   els.resultBody.addEventListener('click', onResultClick);
-  els.resultBody.addEventListener('input', onResultEdit);
+  els.resultBody.addEventListener('input', (e) => {
+    if (e.target.id === 'shotSearch') { applyFilter(); return; }
+    onResultEdit(e);
+  });
   els.resultBody.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('seek')) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target;
+    if (el.classList?.contains('seek')) {
       e.preventDefault();
-      const row = e.target.closest('.shot-row');
+      const row = el.closest('.shot-row');
       if (row) seekTo(row);
+    } else if (el.classList?.contains('shot-card')) {
+      e.preventDefault();
+      seekTo(el);
     }
   });
 }

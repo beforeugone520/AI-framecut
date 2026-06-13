@@ -49,6 +49,11 @@ export function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
+// 用于 HTML 属性值：在 esc 基础上再转义引号，防止属性截断 / 注入
+export function escAttr(str) {
+  return esc(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // 安全的文件名（去掉扩展名与非法字符）
 export function baseName(filename = 'video') {
   return String(filename).replace(/\.[^.]+$/, '').replace(/[^\w一-龥-]+/g, '_').slice(0, 60) || 'video';
@@ -63,6 +68,25 @@ export function parseTimecode(tc) {
   const parts = str.split(':').map((p) => parseFloat(p));
   if (parts.some((p) => !Number.isFinite(p))) return null;
   return parts.reduce((acc, p) => acc * 60 + p, 0);
+}
+
+// 计算每个镜头的起始秒：优先用模型给的 start，缺失则按累计时长推算
+export function computeShotTimes(shots, totalDuration) {
+  const times = [];
+  let cursor = 0;
+  for (const s of shots) {
+    const startSec = parseTimecode(s.start);
+    const start = Number.isFinite(startSec) ? startSec : cursor;
+    times.push(start);
+    const endSec = parseTimecode(s.end);
+    if (Number.isFinite(endSec) && endSec > start) cursor = endSec;
+    else if (Number.isFinite(s.duration_sec)) cursor = start + s.duration_sec;
+    else cursor = start;
+  }
+  if (Number.isFinite(totalDuration)) {
+    return times.map((t) => Math.max(0, Math.min(totalDuration, t)));
+  }
+  return times;
 }
 
 // 有限并发地映射异步任务，保持结果顺序
