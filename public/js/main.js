@@ -1,4 +1,4 @@
-import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit, friendlyError } from './util.js';
+import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit, friendlyError, escAttr } from './util.js';
 import { load, save, PROVIDERS, TRANSCRIBE_ENGINES } from './store.js';
 import { loadVideoMeta, extractFrames } from './extract.js';
 import { extractAudioSegments, formatTranscript } from './audio.js';
@@ -511,10 +511,6 @@ function setBusy(b) {
   els.analyzeBtn.disabled = b ? false : !currentFile;
   els.analyzeBtn.textContent = b ? '取消分析' : '开始拉片分析';
   els.analyzeBtn.classList.toggle('is-cancel', b);
-}
-
-function escAttr(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /* ── 事件绑定 ── */
