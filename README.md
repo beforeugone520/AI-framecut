@@ -96,8 +96,15 @@ ai-framecut/
 ├─ public/
 │  ├─ index.html
 │  ├─ css/style.css
-│  └─ js/                 main / store / extract / audio / thumbs / api / render / exporters / history / util
-└─ test/                  node:test 单元测试（core / export / backend / ui）
+│  └─ js/
+│     ├─ main.js          入口：装配模块、文件上传、事件绑定
+│     ├─ ui-state.js      共享状态中枢（DOM 引用 / 设置 / 运行时状态）
+│     ├─ analysis.js      分析主流程（Gemini 原生 / 抽帧 + 转写编排）
+│     ├─ results.js       结果展示 / 缩略图 / 跳转 / 筛选 / 编辑 / 导出
+│     ├─ history-ui.js    历史列表 UI；settings-ui.js 配置面板；status.js 状态栏
+│     ├─ logic.js         纯领域逻辑（可单测）：转写 Key 解析 / 筛选匹配 / 日期
+│     └─ extract / audio / thumbs / api / render / exporters / store / history / util
+└─ test/                  node:test 单元测试（core / export / backend / ui / logic）
 ```
 
 ## 测试
