@@ -57,7 +57,7 @@ export function renderResult(result, container) {
   const maxDur = shots.reduce((m, s) => Math.max(m, s.duration_sec || 0), 0) || 1;
   html += `<div class="section-label">分镜镜头脚本 · <span id="shotCount">共 ${shots.length} 个镜头</span><span class="hint-inline">（点缩略图跳转视频 · 文字单元格可直接编辑，导出自动同步）</span></div>`;
   html += renderBoardTools(shots);
-  html += `<div class="table-wrap" id="tableView"><table class="shots" aria-label="分镜镜头脚本，可编辑">
+  html += `<div class="table-wrap" id="tableView" role="region" aria-label="分镜表（可横向滚动）" tabindex="0"><table class="shots" aria-label="分镜镜头脚本，可编辑">
     <thead><tr>
       <th class="col-thumb">画面</th>
       <th class="col-no">镜号</th>

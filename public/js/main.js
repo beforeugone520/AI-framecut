@@ -1,4 +1,4 @@
-import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit, friendlyError, escAttr } from './util.js';
+import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit, friendlyError, escAttr, nowStamp } from './util.js';
 import { load, save, PROVIDERS, TRANSCRIBE_ENGINES } from './store.js';
 import { loadVideoMeta, extractFrames } from './extract.js';
 import { extractAudioSegments, formatTranscript } from './audio.js';
@@ -304,35 +304,51 @@ function showResultFromHistory(result) {
   toast('已载入历史结果（缩略图与跳转需重新上传同一视频）');
 }
 
-// 按镜头起始时间抽取缩略图，填进分镜表与画廊。gen 用于作废过期填充。
+// 按镜头起始时间抽取缩略图，渐进填进分镜表与画廊。gen 用于作废过期填充。
 async function fillThumbnails(result, gen) {
   currentThumbs = [];
   const fileAtStart = currentFile;
   if (!fileAtStart || !Array.isArray(result.shots) || !result.shots.length) return;
   const times = computeShotTimes(result.shots, result.meta?.duration);
-  let thumbs;
+  const stale = () => gen !== viewGen || currentFile !== fileAtStart;
+
+  setThumbsLoading(true); // 抽帧期间显示加载脉冲
   try {
-    thumbs = await captureThumbnails(fileAtStart, times, { maxDim: 200, signal: abortController?.signal });
+    currentThumbs = await captureThumbnails(fileAtStart, times, {
+      maxDim: 200,
+      signal: abortController?.signal,
+      onFrame: (i, url) => { // 逐张出现
+        if (stale()) return;
+        if (url) applyOneThumb(i, url);
+        else clearThumbLoading(i);
+      }
+    });
   } catch {
+    if (!stale()) setThumbsLoading(false);
     return; // 缩略图失败/取消不影响主结果
   }
-  // 期间若换了视频或重新分析，则放弃本次填充，避免错填到新结果
-  if (gen !== viewGen || currentFile !== fileAtStart) return;
-  currentThumbs = thumbs;
-  applyThumbs(thumbs);
+  if (stale()) return;
+  setThumbsLoading(false); // 清掉任何残留脉冲（失败帧）
 }
 
-// 把缩略图 dataURL 填到表格 .thumb 与画廊 .gthumb（两视图共用同一批图）
-function applyThumbs(thumbs) {
-  thumbs.forEach((url, i) => {
-    if (!url) return;
-    for (const sel of [`.thumb[data-thumb="${i}"]`, `.gthumb[data-gthumb="${i}"]`]) {
-      const el = els.resultBody.querySelector(sel);
-      if (el) {
-        el.style.backgroundImage = `url(${url})`;
-        el.classList.add('has-img');
-      }
-    }
+function thumbEls(i) {
+  return [`.thumb[data-thumb="${i}"]`, `.gthumb[data-gthumb="${i}"]`]
+    .map((sel) => els.resultBody.querySelector(sel))
+    .filter(Boolean);
+}
+function applyOneThumb(i, url) {
+  for (const el of thumbEls(i)) {
+    el.style.backgroundImage = `url(${url})`;
+    el.classList.add('has-img');
+    el.classList.remove('loading');
+  }
+}
+function clearThumbLoading(i) {
+  for (const el of thumbEls(i)) el.classList.remove('loading');
+}
+function setThumbsLoading(on) {
+  els.resultBody.querySelectorAll('.thumb, .gthumb').forEach((el) => {
+    el.classList.toggle('loading', on && !el.classList.contains('has-img'));
   });
 }
 
@@ -431,7 +447,7 @@ function onResultEdit(e) {
 /* ── 导出 ── */
 function handleExport(kind) {
   if (!lastResult) return;
-  const name = baseName(lastExportMeta?.filename) + '_拉片';
+  const name = `${baseName(lastExportMeta?.filename)}_拉片_${nowStamp()}`;
   if (kind === 'md') {
     navigator.clipboard.writeText(toMarkdown(lastResult, lastExportMeta))
       .then(() => toast('Markdown 已复制到剪贴板'))

@@ -87,6 +87,12 @@ export function baseName(filename = 'video') {
   return String(filename).replace(/\.[^.]+$/, '').replace(/[^\w一-龥-]+/g, '_').slice(0, 60) || 'video';
 }
 
+// 文件名用的时间戳 YYYYMMDD_HHmm（避免多次导出互相覆盖）
+export function nowStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
 // 解析 "m:ss" / "mm:ss" / "h:mm:ss" / "12.5" 形式的时间码为秒；解析失败返回 null
 export function parseTimecode(tc) {
   if (tc == null || tc === '') return null;

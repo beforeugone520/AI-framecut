@@ -2,7 +2,7 @@
 // 与抽帧分析独立：无论 Gemini 原生模式还是抽帧模式，只要原视频还在浏览器里就能用。
 import { abortError } from './util.js';
 
-export async function captureThumbnails(file, times, { maxDim = 200, quality = 0.6, onProgress, signal } = {}) {
+export async function captureThumbnails(file, times, { maxDim = 200, quality = 0.6, onProgress, onFrame, signal } = {}) {
   const video = document.createElement('video');
   video.preload = 'auto';
   video.muted = true;
@@ -41,6 +41,7 @@ export async function captureThumbnails(file, times, { maxDim = 200, quality = 0
     } catch {
       out.push(null);
     }
+    onFrame?.(i, out[i]); // 逐帧回调，便于渐进填充
     onProgress?.(i + 1, times.length);
   }
 

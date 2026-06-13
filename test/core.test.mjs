@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractJson, normalizeResult } from '../lib/json.js';
-import { parseTimecode, computeShotTimes, friendlyError, escAttr, mapLimit, abortError } from '../public/js/util.js';
+import { parseTimecode, computeShotTimes, friendlyError, escAttr, mapLimit, abortError, nowStamp } from '../public/js/util.js';
 
 test('extractJson: 代码围栏 / 前缀文字 / 尾逗号', () => {
   assert.equal(extractJson('```json\n{"x":1}\n```').x, 1);
@@ -86,4 +86,9 @@ test('mapLimit: 保序 + 处理全部', async () => {
 
 test('abortError: name 为 AbortError', () => {
   assert.equal(abortError().name, 'AbortError');
+});
+
+test('nowStamp: YYYYMMDD_HHmm 补零', () => {
+  assert.equal(nowStamp(new Date(2026, 5, 13, 9, 5)), '20260613_0905');
+  assert.equal(nowStamp(new Date(2026, 11, 1, 23, 59)), '20261201_2359');
 });
