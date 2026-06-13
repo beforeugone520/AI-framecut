@@ -311,8 +311,22 @@ function onResultClick(e) {
     }
     return;
   }
-  const row = e.target.closest('.shot-row');
-  if (row) seekTo(row);
+  // 仅缩略图 / 镜号触发跳转；文字单元格用于编辑，不跳转
+  if (e.target.closest('.seek')) {
+    const row = e.target.closest('.shot-row');
+    if (row) seekTo(row);
+  }
+}
+
+// 就地编辑分镜文字 → 同步回 lastResult（导出随之更新）
+function onResultEdit(e) {
+  const cell = e.target.closest('[data-field]');
+  if (!cell || !lastResult || !Array.isArray(lastResult.shots)) return;
+  const i = Number(cell.dataset.i);
+  const field = cell.dataset.field;
+  if (lastResult.shots[i] && field) {
+    lastResult.shots[i][field] = cell.textContent.trim();
+  }
 }
 
 /* ── 导出 ── */
@@ -390,10 +404,12 @@ function bind() {
     if (btn) handleExport(btn.dataset.export);
   });
   els.resultBody.addEventListener('click', onResultClick);
+  els.resultBody.addEventListener('input', onResultEdit);
   els.resultBody.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('shot-row')) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('seek')) {
       e.preventDefault();
-      seekTo(e.target);
+      const row = e.target.closest('.shot-row');
+      if (row) seekTo(row);
     }
   });
 }

@@ -251,11 +251,20 @@ table.shots th.col-thumb { width: 116px; }
 .thumb-no { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text-faint); }
 .thumb.has-img .thumb-no { position: absolute; left: 4px; top: 2px; font-size: 10px; color: #fff; text-shadow: 0 1px 3px #000; }
 .thumb-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; opacity: 0; transition: opacity 0.15s; text-shadow: 0 1px 4px #000; }
-.shot-row { cursor: pointer; outline: none; }
-.shot-row:hover .thumb-play, .shot-row:focus .thumb-play { opacity: 0.95; }
-.shot-row:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.shot-row { outline: none; }
+.col-thumb.seek, .col-no.seek { cursor: pointer; outline: none; }
+.col-thumb.seek:hover .thumb-play, .col-thumb.seek:focus .thumb-play { opacity: 0.95; }
+.col-thumb.seek:focus .thumb { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.col-no.seek:hover { color: #fff; }
 .shot-row.active { background: rgba(255, 93, 59, 0.1) !important; }
 .shot-row.active .thumb { border-color: var(--accent); }
+
+/* 可编辑单元格 */
+td.editable { cursor: text; transition: background 0.12s, box-shadow 0.12s; }
+td.editable:hover { background: rgba(255, 255, 255, 0.03); }
+td.editable:focus { outline: none; background: rgba(255, 177, 59, 0.07); box-shadow: inset 0 0 0 1.5px var(--accent-2); border-radius: 4px; }
+td.editable:empty::before { content: '—'; color: var(--text-faint); }
+td.editable:focus:empty::before { content: '输入…'; }
 
 /* 时长可视化条 */
 .dur-num { display: block; }

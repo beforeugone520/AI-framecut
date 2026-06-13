@@ -68,7 +68,7 @@ export function renderResult(result, container) {
 
   // 分镜表
   const maxDur = shots.reduce((m, s) => Math.max(m, s.duration_sec || 0), 0) || 1;
-  html += `<div class="section-label">分镜镜头脚本 · 共 ${shots.length} 个镜头<span class="hint-inline">（点击任一镜头跳转视频对应时刻）</span></div>`;
+  html += `<div class="section-label">分镜镜头脚本 · 共 ${shots.length} 个镜头<span class="hint-inline">（点缩略图跳转视频 · 文字单元格可直接编辑，导出自动同步）</span></div>`;
   html += `<div class="table-wrap"><table class="shots">
     <thead><tr>
       <th class="col-thumb">画面</th>
@@ -83,13 +83,15 @@ export function renderResult(result, container) {
   shots.forEach((s, i) => {
     const tsLabel = (s.start || s.end) ? `${esc(s.start || '')}${s.end ? ' → ' + esc(s.end) : ''}` : fmtTime(times[i]);
     const barPct = Math.round(((s.duration_sec || 0) / maxDur) * 100);
-    html += `<tr class="shot-row" data-start="${times[i] ?? 0}" tabindex="0" title="点击跳转到 ${fmtTime(times[i])}">
-      <td class="col-thumb"><div class="thumb" data-thumb="${i}"><span class="thumb-no">${esc(s.shot_number)}</span><span class="thumb-play">▶</span></div></td>
-      <td class="col-no">${esc(s.shot_number)}</td>
-      <td class="col-size">${esc(s.shot_size) || '—'}</td>
-      <td class="col-move">${esc(s.movement) || '—'}</td>
-      <td class="col-visual">${esc(s.visual) || '—'}</td>
-      <td class="col-audio">${esc(s.audio) || '—'}</td>
+    const ed = (field, cls, val) =>
+      `<td class="${cls} editable" contenteditable="true" data-field="${field}" data-i="${i}">${esc(val)}</td>`;
+    html += `<tr class="shot-row" data-start="${times[i] ?? 0}">
+      <td class="col-thumb seek" tabindex="0" title="跳转到 ${fmtTime(times[i])}"><div class="thumb" data-thumb="${i}"><span class="thumb-no">${esc(s.shot_number)}</span><span class="thumb-play">▶</span></div></td>
+      <td class="col-no seek" title="跳转到 ${fmtTime(times[i])}">${esc(s.shot_number)}</td>
+      ${ed('shot_size', 'col-size', s.shot_size)}
+      ${ed('movement', 'col-move', s.movement)}
+      ${ed('visual', 'col-visual', s.visual)}
+      ${ed('audio', 'col-audio', s.audio)}
       <td class="col-dur">
         <span class="dur-num">${s.duration_sec != null ? esc(s.duration_sec) : '—'}</span>
         <span class="dur-bar"><i style="width:${barPct}%"></i></span>
