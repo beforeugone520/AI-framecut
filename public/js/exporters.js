@@ -65,6 +65,30 @@ export function toJSON(result) {
   return JSON.stringify(result, null, 2);
 }
 
+// 把风格总结 + 分镜节奏拼成一段可直接喂给 AI 视频生成 / 拍摄团队的「复刻提示词」
+export function buildReplicationPrompt(result) {
+  const { style = {}, shots = [], video_summary } = result;
+  const lines = ['【视频复刻提示词】'];
+  if (video_summary) lines.push(`主题：${oneLine(video_summary)}`);
+  lines.push('');
+  for (const [k, label] of STYLE_ROWS) {
+    if (style[k]) lines.push(`${label}：${oneLine(style[k])}`);
+  }
+  if (style.replication_tips) {
+    lines.push('', `复刻要点：${oneLine(style.replication_tips)}`);
+  }
+  if (shots.length) {
+    const totalSec = shots.reduce((a, s) => a + (Number(s.duration_sec) || 0), 0);
+    lines.push('', `分镜节奏（共 ${shots.length} 镜，约 ${Math.round(totalSec)} 秒）：`);
+    shots.forEach((s) => {
+      const tag = [s.shot_size, s.movement].filter(Boolean).join('·');
+      const dur = s.duration_sec != null ? ` (${s.duration_sec}s)` : '';
+      lines.push(`${s.shot_number}. [${tag || '镜头'}] ${oneLine(s.visual)}${dur}`);
+    });
+  }
+  return lines.join('\n');
+}
+
 function cell(v) {
   return oneLine(v).replace(/\|/g, '\\|') || '—';
 }

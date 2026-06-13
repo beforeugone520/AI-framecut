@@ -1,10 +1,11 @@
-import { $, fmtTime, fmtBytes, download, toast, baseName } from './util.js';
+import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit } from './util.js';
 import { load, save, PROVIDERS, TRANSCRIBE_ENGINES } from './store.js';
 import { loadVideoMeta, extractFrames } from './extract.js';
 import { extractAudioSegments, formatTranscript } from './audio.js';
+import { captureThumbnails } from './thumbs.js';
 import { analyzeVideo, analyzeFrames, transcribeAudio } from './api.js';
-import { renderResult } from './render.js';
-import { toMarkdown, toCSV, toJSON } from './exporters.js';
+import { renderResult, computeShotTimes } from './render.js';
+import { toMarkdown, toCSV, toJSON, buildReplicationPrompt } from './exporters.js';
 
 const els = {
   provider: $('#provider'),
@@ -41,6 +42,7 @@ let currentObjectUrl = null;
 let lastResult = null;
 let lastExportMeta = null;
 let busy = false;
+let viewGen = 0; // 视图代号：换视频/重新分析时自增，作废在途的缩略图填充
 
 /* ── 初始化 UI ── */
 function initUI() {
@@ -100,6 +102,14 @@ async function handleFile(file) {
     currentFile = file;
     currentMeta = { duration: meta.duration, width: meta.width, height: meta.height };
     currentObjectUrl = meta.objectUrl;
+
+    // 换视频：作废旧结果，避免旧分镜行点击后跳错视频、旧缩略图错填
+    viewGen++;
+    lastResult = null;
+    els.resultBody.hidden = true;
+    els.resultBody.innerHTML = '';
+    els.exportBar.hidden = true;
+    els.empty.hidden = false;
 
     els.preview.src = meta.objectUrl;
     els.metaList.innerHTML = `
@@ -206,21 +216,39 @@ async function runTranscription(analysisProvider, analysisKey) {
     return '';
   }
 
-  const merged = [];
-  for (let i = 0; i < audio.segments.length; i++) {
-    setStatus('working', `正在转写音频 ${i + 1}/${audio.segments.length} 段…`);
-    const seg = audio.segments[i];
-    const r = await transcribeAudio({
-      engine: engineKey,
-      model: engineConf.defaultModel,
-      apiKey: key,
-      baseUrl: engineKey === 'openai' ? els.baseUrl.value.trim() : '',
-      blob: seg.blob
-    });
-    for (const s of (r.segments || [])) {
-      merged.push({ start: (s.start || 0) + seg.offset, end: (s.end || 0) + seg.offset, text: s.text });
+  // 多段并发转写（限并发，加速长视频）；单段失败不影响其余段，顺序由后续 sort 保证
+  const total = audio.segments.length;
+  let done = 0;
+  let failed = 0;
+  const perSeg = await mapLimit(audio.segments, Math.min(3, total), async (seg) => {
+    try {
+      const r = await transcribeAudio({
+        engine: engineKey,
+        model: engineConf.defaultModel,
+        apiKey: key,
+        baseUrl: engineKey === 'openai' ? els.baseUrl.value.trim() : '',
+        blob: seg.blob
+      });
+      done++;
+      setStatus('working', `正在转写音频 ${done}/${total} 段…`);
+      return (r.segments || []).map((s) => ({
+        start: (s.start || 0) + seg.offset,
+        end: (s.end || 0) + seg.offset,
+        text: s.text
+      }));
+    } catch (e) {
+      done++;
+      failed++;
+      setStatus('working', `正在转写音频 ${done}/${total} 段（有 ${failed} 段失败，已跳过）…`);
+      return [];
     }
+  });
+  // 全部失败：抛出清晰错误（首段错误信息），便于排查（如 Key 无效）
+  if (failed === total) {
+    throw new Error('音频转写全部失败，请检查转写 API Key 与网络');
   }
+  if (failed > 0) toast(`有 ${failed}/${total} 段音频转写失败，已跳过`);
+  const merged = perSeg.flat();
   if (!merged.length) {
     toast('音频转写为空（可能无人声/纯音乐）');
     return '';
@@ -230,10 +258,61 @@ async function runTranscription(analysisProvider, analysisKey) {
 }
 
 function showResult(result) {
+  viewGen++;
   els.empty.hidden = true;
   els.resultBody.hidden = false;
   els.exportBar.hidden = false;
   renderResult(result, els.resultBody);
+  fillThumbnails(result, viewGen); // 异步填充，不阻塞结果展示
+}
+
+// 按镜头起始时间抽取缩略图，填进分镜表第一列。gen 用于作废过期填充。
+async function fillThumbnails(result, gen) {
+  const fileAtStart = currentFile;
+  if (!fileAtStart || !Array.isArray(result.shots) || !result.shots.length) return;
+  const times = computeShotTimes(result.shots, result.meta?.duration);
+  let thumbs;
+  try {
+    thumbs = await captureThumbnails(fileAtStart, times, { maxDim: 200 });
+  } catch {
+    return; // 缩略图失败不影响主结果
+  }
+  // 期间若换了视频或重新分析，则放弃本次填充，避免错填到新结果
+  if (gen !== viewGen || currentFile !== fileAtStart) return;
+  thumbs.forEach((url, i) => {
+    if (!url) return;
+    const el = els.resultBody.querySelector(`.thumb[data-thumb="${i}"]`);
+    if (el) {
+      el.style.backgroundImage = `url(${url})`;
+      el.classList.add('has-img');
+    }
+  });
+}
+
+// 点击镜头 → 视频跳转到该时刻播放并高亮
+function seekTo(row) {
+  const t = parseFloat(row.dataset.start);
+  if (!Number.isFinite(t)) return;
+  if (!els.preview.src) { toast('请先上传视频'); return; }
+  els.preview.currentTime = t;
+  els.preview.play?.().catch(() => {});
+  els.resultBody.querySelectorAll('.shot-row.active').forEach((r) => r.classList.remove('active'));
+  row.classList.add('active');
+  els.preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function onResultClick(e) {
+  const copyBtn = e.target.closest('[data-action="copy-recreate"]');
+  if (copyBtn) {
+    if (lastResult) {
+      navigator.clipboard.writeText(buildReplicationPrompt(lastResult))
+        .then(() => toast('复刻提示词已复制到剪贴板'))
+        .catch(() => toast('复制失败'));
+    }
+    return;
+  }
+  const row = e.target.closest('.shot-row');
+  if (row) seekTo(row);
 }
 
 /* ── 导出 ── */
@@ -309,6 +388,13 @@ function bind() {
   els.exportBar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-export]');
     if (btn) handleExport(btn.dataset.export);
+  });
+  els.resultBody.addEventListener('click', onResultClick);
+  els.resultBody.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('shot-row')) {
+      e.preventDefault();
+      seekTo(e.target);
+    }
   });
 }
 

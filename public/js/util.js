@@ -53,3 +53,29 @@ export function esc(str) {
 export function baseName(filename = 'video') {
   return String(filename).replace(/\.[^.]+$/, '').replace(/[^\w一-龥-]+/g, '_').slice(0, 60) || 'video';
 }
+
+// 解析 "m:ss" / "mm:ss" / "h:mm:ss" / "12.5" 形式的时间码为秒；解析失败返回 null
+export function parseTimecode(tc) {
+  if (tc == null || tc === '') return null;
+  if (typeof tc === 'number') return Number.isFinite(tc) ? tc : null;
+  const str = String(tc).trim();
+  if (/^\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+  const parts = str.split(':').map((p) => parseFloat(p));
+  if (parts.some((p) => !Number.isFinite(p))) return null;
+  return parts.reduce((acc, p) => acc * 60 + p, 0);
+}
+
+// 有限并发地映射异步任务，保持结果顺序
+export async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = new Array(Math.max(1, Math.min(limit, items.length))).fill(0).map(async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
