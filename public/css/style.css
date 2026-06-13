@@ -171,6 +171,7 @@ input[type="range"] { accent-color: var(--accent); padding: 0; }
   align-items: center;
   gap: 10px;
 }
+.status span { white-space: pre-line; } /* 让错误建议换行显示 */
 .status.working { border-color: rgba(255,177,59,0.4); color: var(--accent-2); }
 .status.error { border-color: rgba(255,107,107,0.5); color: var(--bad); background: rgba(255,107,107,0.07); }
 .status.done { border-color: rgba(70,211,154,0.4); color: var(--good); }

@@ -54,6 +54,25 @@ export function escAttr(str) {
   return esc(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// 给常见的大模型 API 错误附上可操作的中文建议
+export function friendlyError(msg) {
+  const m = String(msg ?? '');
+  const low = m.toLowerCase();
+  let hint = '';
+  if (low.includes('model') && (/\b404\b/.test(m) || low.includes('not found') || low.includes('does not exist') || low.includes('not_found'))) {
+    hint = '模型 ID 可能不可用，请在「模型」里改成你账号支持的 ID。';
+  } else if (/\b401\b/.test(m) || low.includes('unauthorized') || low.includes('invalid api key') || low.includes('invalid x-api-key') || low.includes('incorrect api key') || low.includes('api key not valid')) {
+    hint = '请检查 API Key 是否正确、未过期。';
+  } else if (/\b403\b/.test(m) || low.includes('forbidden') || low.includes('permission')) {
+    hint = '该 Key 无权限或所在地区不可用，请检查 Key 权限 / 区域。';
+  } else if (/\b429\b/.test(m) || low.includes('rate limit') || low.includes('quota') || low.includes('exhausted') || low.includes('insufficient')) {
+    hint = '触发限流或额度不足，请稍后重试或检查账户额度。';
+  } else if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('econnrefused') || low.includes('network error')) {
+    hint = '网络请求失败，请确认本地服务在运行、网络可访问对应 API。';
+  }
+  return hint ? `${m}\n💡 ${hint}` : m;
+}
+
 // 安全的文件名（去掉扩展名与非法字符）
 export function baseName(filename = 'video') {
   return String(filename).replace(/\.[^.]+$/, '').replace(/[^\w一-龥-]+/g, '_').slice(0, 60) || 'video';

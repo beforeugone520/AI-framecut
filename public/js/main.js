@@ -1,4 +1,4 @@
-import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit } from './util.js';
+import { $, fmtTime, fmtBytes, download, toast, baseName, mapLimit, friendlyError } from './util.js';
 import { load, save, PROVIDERS, TRANSCRIBE_ENGINES } from './store.js';
 import { loadVideoMeta, extractFrames } from './extract.js';
 import { extractAudioSegments, formatTranscript } from './audio.js';
@@ -193,7 +193,7 @@ async function runAnalysis() {
     setStatus('done', `分析完成 · 共 ${result.shots.length} 个镜头`);
   } catch (err) {
     console.error(err);
-    setStatus('error', err.message || String(err));
+    setStatus('error', friendlyError(err.message || String(err)));
   } finally {
     setBusy(false);
   }
