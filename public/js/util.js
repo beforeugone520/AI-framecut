@@ -89,7 +89,8 @@ export function parseTimecode(tc) {
   return parts.reduce((acc, p) => acc * 60 + p, 0);
 }
 
-// 计算每个镜头的起始秒：优先用模型给的 start，缺失则按累计时长推算
+// 计算每个镜头的起始秒：优先用模型给的 start，缺失则按累计时长推算。
+// 保证两个不变量：游标始终前进（缺时长也不停滞）、最终序列单调不减（模型给乱序 start 也不倒退）。
 export function computeShotTimes(shots, totalDuration) {
   const times = [];
   let cursor = 0;
@@ -99,8 +100,12 @@ export function computeShotTimes(shots, totalDuration) {
     times.push(start);
     const endSec = parseTimecode(s.end);
     if (Number.isFinite(endSec) && endSec > start) cursor = endSec;
-    else if (Number.isFinite(s.duration_sec)) cursor = start + s.duration_sec;
-    else cursor = start;
+    else if (Number.isFinite(s.duration_sec) && s.duration_sec > 0) cursor = start + s.duration_sec;
+    else cursor = start + 0.1; // 无任何时长信息也要前进，避免下一镜拿到重复起点
+  }
+  // 强制单调不减：模型给出乱序/递减 start 时，不让 seek/SRT/时长展示倒退
+  for (let i = 1; i < times.length; i++) {
+    if (times[i] < times[i - 1]) times[i] = times[i - 1];
   }
   if (Number.isFinite(totalDuration)) {
     return times.map((t) => Math.max(0, Math.min(totalDuration, t)));
