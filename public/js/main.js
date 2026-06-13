@@ -363,7 +363,12 @@ function onResultClick(e) {
   if (vt) { setView(vt.dataset.view); return; }
 
   const chip = e.target.closest('.szchip');
-  if (chip) { chip.classList.toggle('active'); applyFilter(); return; }
+  if (chip) {
+    chip.classList.toggle('active');
+    chip.setAttribute('aria-pressed', String(chip.classList.contains('active')));
+    applyFilter();
+    return;
+  }
 
   // 跳转：画廊里整张卡片(.shot-card)，表格里仅缩略图/镜号(.seek→所属 .shot-row)
   const card = e.target.closest('.shot-card');
@@ -381,7 +386,11 @@ function setView(view) {
   const isGallery = view === 'gallery';
   table.hidden = isGallery;
   gallery.hidden = !isGallery;
-  els.resultBody.querySelectorAll('.vt').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  els.resultBody.querySelectorAll('.vt').forEach((b) => {
+    const on = b.dataset.view === view;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
 }
 
 // 关键词 + 景别筛选：仅隐藏不重排，data-row/data-card 索引不变，编辑同步安全
@@ -448,11 +457,11 @@ function renderHistory() {
   els.historyBox.hidden = false;
   const items = list.map((e) => `
     <li class="hist-item" data-id="${e.id}">
-      <button class="hist-open" data-id="${e.id}" title="载入此结果">
+      <button class="hist-open" data-id="${e.id}" title="载入此结果" aria-label="载入历史结果：${escAttr(e.filename)}">
         <span class="hist-name">${escAttr(e.filename)}</span>
         <span class="hist-sub">${escAttr(e.engine)} · ${e.shotCount} 镜 · ${fmtDate(e.ts)}</span>
       </button>
-      <button class="hist-del" data-del="${e.id}" title="删除">✕</button>
+      <button class="hist-del" data-del="${e.id}" title="删除" aria-label="删除历史：${escAttr(e.filename)}">✕</button>
     </li>`).join('');
   els.historyBox.innerHTML = `<details open><summary>📁 历史分析（最近 ${list.length} 条 · 本机保存）</summary><ul class="hist-list">${items}</ul></details>`;
 }
@@ -556,8 +565,10 @@ function bind() {
     onResultEdit(e);
   });
   els.resultBody.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
     const el = e.target;
+    if (e.key === 'Escape' && el.isContentEditable) { el.blur(); return; } // 退出编辑
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (el.isContentEditable) return; // 可编辑单元格里回车/空格为正常输入
     if (el.classList?.contains('seek')) {
       e.preventDefault();
       const row = el.closest('.shot-row');

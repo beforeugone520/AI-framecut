@@ -85,17 +85,38 @@ ai-framecut/
 ├─ server.js              本地 HTTP 服务：静态托管 + 大模型 API 代理（规避 CORS）
 ├─ lib/
 │  ├─ static.js           静态文件服务
+│  ├─ http.js             带超时的 fetch + 上游错误收口 + Base URL 校验
 │  ├─ prompt.js           专家级「拉片」提示词 + JSON 输出规范
-│  ├─ json.js             模型输出的稳健 JSON 解析与字段归一化
+│  ├─ json.js             模型输出的稳健 JSON 解析（括号配对扫描）与字段归一化
 │  └─ providers/
 │     ├─ gemini.js        Gemini 原生视频分析（Files API 上传）
 │     ├─ claude.js        Claude 抽帧分析
-│     └─ openai.js        OpenAI 抽帧分析
-└─ public/
-   ├─ index.html
-   ├─ css/style.css
-   └─ js/                 main / store / extract / api / render / exporters / util
+│     ├─ openai.js        OpenAI 抽帧分析
+│     └─ transcribe.js    音频转写（Whisper / Gemini）
+├─ public/
+│  ├─ index.html
+│  ├─ css/style.css
+│  └─ js/                 main / store / extract / audio / thumbs / api / render / exporters / history / util
+└─ test/                  node:test 单元测试（core / export / backend / ui）
 ```
+
+## 测试
+
+核心容错逻辑（JSON 解析与归一化、时间轴推算、SRT 时间码、错误收口、导出、渲染、历史）都有单元测试：
+
+```bash
+npm test        # = node --test，零依赖
+```
+
+## 可靠性与无障碍
+
+- **超时**：所有大模型调用都有超时（分析 5 分钟 / 转写 2 分钟 / 状态轮询 20 秒），不会无限卡住。
+- **可取消**：分析过程中「开始拉片分析」按钮变为「取消分析」，点击即中止抽帧 / 转写 / 上传等在途任务；换视频也会自动取消。
+- **无障碍**：分镜表、可编辑单元格、缩略图跳转、画廊卡片、筛选与历史都带 ARIA 标签，支持键盘操作（Tab 移动、Enter/Space 跳转、Escape 退出编辑），状态变化经 `aria-live` 播报。
+
+## 时间轴说明
+
+「时长 / 起止 / SRT 字幕」基于模型给出的 `start/end`；当模型未精确定位（多见于抽帧模式）时，按累计 `duration_sec` 推算。推算保证**单调不减**，因此点击镜头跳转与导出的 SRT 不会出现时间倒退。要最精确的时间轴请用 **Gemini 原生视频模式**。
 
 ## 隐私与安全
 

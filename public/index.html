@@ -86,22 +86,22 @@
         </details>
 
         <h2 class="panel-title">2 · 上传视频</h2>
-        <div id="dropzone" class="dropzone" tabindex="0">
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="上传视频：点击选择文件，或将视频拖拽到此处">
           <input id="fileInput" type="file" accept="video/*" hidden />
           <div class="dz-inner">
-            <span class="dz-icon">⬆️</span>
+            <span class="dz-icon" aria-hidden="true">⬆️</span>
             <p><b>点击或拖拽</b> 视频到此处</p>
             <p class="hint">支持 mp4 / mov / webm 等 · Gemini 模式可读取音频</p>
           </div>
         </div>
 
         <div id="videoMeta" class="video-meta" hidden>
-          <video id="preview" class="preview" controls muted playsinline></video>
+          <video id="preview" class="preview" controls muted playsinline aria-label="视频预览"></video>
           <ul class="meta-list" id="metaList"></ul>
         </div>
 
         <button id="analyzeBtn" class="primary" disabled>开始拉片分析</button>
-        <div id="status" class="status" hidden></div>
+        <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
       </section>
 
       <!-- 右栏：结果 -->
