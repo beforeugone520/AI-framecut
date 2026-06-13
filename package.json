@@ -1,0 +1,14 @@
+{
+  "name": "ai-framecut",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "网页端 AI 视频拉片分析：上传视频 → 调用大模型 → 输出分镜镜头脚本与画面风格总结",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

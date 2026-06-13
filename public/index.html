@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Framecut · AI 视频拉片分析</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🎬</span>
+        <div>
+          <h1>AI Framecut</h1>
+          <p class="tagline">专业级 AI 视频拉片 · 分镜镜头脚本 · 画面风格复刻</p>
+        </div>
+      </div>
+      <a class="ghost-link" href="https://ai.google.dev/gemini-api/docs/video-understanding" target="_blank" rel="noreferrer">视频理解能力说明 ↗</a>
+    </header>
+
+    <main class="layout">
+      <!-- 左栏：配置 + 上传 -->
+      <section class="panel config">
+        <h2 class="panel-title">1 · 模型与密钥</h2>
+
+        <label class="field">
+          <span class="field-label">分析引擎</span>
+          <select id="provider">
+            <option value="gemini">Google Gemini（推荐 · 原生读取画面+音频）</option>
+            <option value="claude">Anthropic Claude（抽帧分析）</option>
+            <option value="openai">OpenAI GPT（抽帧分析）</option>
+          </select>
+          <span class="hint" id="providerHint"></span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">模型</span>
+          <input id="model" type="text" autocomplete="off" spellcheck="false" />
+          <span class="hint">可手动修改为你账号可用的模型 ID</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">API Key</span>
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="仅保存在本机浏览器，请求经本地服务转发" />
+        </label>
+
+        <label class="field" id="baseUrlField" hidden>
+          <span class="field-label">API Base URL（可选 · 兼容第三方网关）</span>
+          <input id="baseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1" />
+        </label>
+
+        <details class="advanced">
+          <summary>高级设置</summary>
+          <label class="field">
+            <span class="field-label">额外关注点（可选）</span>
+            <textarea id="focus" rows="2" placeholder="例如：重点分析转场、节奏卡点、调色 LUT 风格…"></textarea>
+          </label>
+          <label class="field" id="framesField">
+            <span class="field-label">抽帧上限（仅抽帧模式）<b id="maxFramesVal">48</b> 帧</span>
+            <input id="maxFrames" type="range" min="8" max="80" step="4" value="48" />
+            <span class="hint">帧越多越细，但耗时与费用越高</span>
+          </label>
+        </details>
+
+        <h2 class="panel-title">2 · 上传视频</h2>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <input id="fileInput" type="file" accept="video/*" hidden />
+          <div class="dz-inner">
+            <span class="dz-icon">⬆️</span>
+            <p><b>点击或拖拽</b> 视频到此处</p>
+            <p class="hint">支持 mp4 / mov / webm 等 · Gemini 模式可读取音频</p>
+          </div>
+        </div>
+
+        <div id="videoMeta" class="video-meta" hidden>
+          <video id="preview" class="preview" controls muted playsinline></video>
+          <ul class="meta-list" id="metaList"></ul>
+        </div>
+
+        <button id="analyzeBtn" class="primary" disabled>开始拉片分析</button>
+        <div id="status" class="status" hidden></div>
+      </section>
+
+      <!-- 右栏：结果 -->
+      <section class="panel results">
+        <div class="results-head">
+          <h2 class="panel-title">分析结果</h2>
+          <div class="export-bar" id="exportBar" hidden>
+            <button data-export="md" class="chip">复制 Markdown</button>
+            <button data-export="md-file" class="chip">下载 .md</button>
+            <button data-export="csv" class="chip">下载 CSV</button>
+            <button data-export="json" class="chip">下载 JSON</button>
+          </div>
+        </div>
+
+        <div id="empty" class="empty">
+          <span class="empty-icon">🎞️</span>
+          <p>上传视频并点击「开始拉片分析」后，<br/>这里会生成分镜镜头脚本与画面风格总结。</p>
+        </div>
+
+        <div id="resultBody" class="result-body" hidden></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>密钥与视频仅在本机处理：浏览器 → 本地 Node 服务 → 你选择的模型 API。服务端不落盘、不存储密钥。</span>
+    </footer>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
