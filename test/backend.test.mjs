@@ -149,6 +149,26 @@ test('analyzeWithGemini: 自定义 Base URL 会归一化常见 /v1 后缀', asyn
   globalThis.fetch = origFetch;
 });
 
+test('analyzeWithGemini: 上传初始化缺少上传地址时给出网关协议提示', async () => {
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<!DOCTYPE html><title>not api</title>', {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' }
+  });
+
+  await assert.rejects(() => analyzeWithGemini({
+    apiKey: 'key',
+    model: 'gemini-2.5-flash',
+    baseUrl: 'https://gemini-compatible.example/v1',
+    videoBuffer: new Uint8Array([1, 2, 3]),
+    mimeType: 'video/mp4',
+    filename: 'test.mp4',
+    meta: { duration: 1 }
+  }), /不支持 Gemini Files 上传协议/);
+
+  globalThis.fetch = origFetch;
+});
+
 test('analyzeWithClaude: 支持自定义 Anthropic Base URL', async () => {
   const origFetch = globalThis.fetch;
   let calledUrl = '';
