@@ -50,6 +50,7 @@ function bind() {
   els.model.addEventListener('input', persist);
   els.apiKey.addEventListener('input', persist);
   els.baseUrl.addEventListener('input', persist);
+  els.openaiMode.addEventListener('change', persist);
   els.focus.addEventListener('input', persist);
   els.maxFrames.addEventListener('input', () => {
     els.maxFramesVal.textContent = els.maxFrames.value;

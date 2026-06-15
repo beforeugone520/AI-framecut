@@ -7,7 +7,7 @@ export const PROVIDERS = {
     label: 'Google Gemini',
     defaultModel: 'gemini-2.5-flash',
     mode: 'video',
-    hint: '原生上传整段视频，可同时分析画面与音频，时间轴最准，最适合拉片。',
+    hint: '原生上传整段视频，可同时分析画面与音频。Gemini 3.1 请填 gemini-3.1-pro-preview。',
     keyUrl: 'https://aistudio.google.com/app/apikey',
     needsBaseUrl: false
   },
@@ -15,9 +15,9 @@ export const PROVIDERS = {
     label: 'Anthropic Claude',
     defaultModel: 'claude-sonnet-4-6',
     mode: 'frames',
-    hint: '浏览器抽取关键帧后做视觉分析；音频由画面线索推断。',
+    hint: '浏览器抽取关键帧后做视觉分析；仅支持 Anthropic 视觉模型，DeepSeek 不支持图片输入，不能用于此模式。',
     keyUrl: 'https://console.anthropic.com/settings/keys',
-    needsBaseUrl: false
+    needsBaseUrl: true
   },
   openai: {
     label: 'OpenAI GPT',
@@ -39,6 +39,7 @@ const defaults = {
   models: {},      // { gemini: '...', claude: '...', openai: '...' }
   keys: {},        // { gemini: '...', ... }
   baseUrl: '',
+  openaiMode: 'chat',
   focus: '',
   maxFrames: 48,
   transcribeOn: false,

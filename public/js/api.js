@@ -19,11 +19,11 @@ export async function analyzeVideo({ file, model, apiKey, focus, meta, signal })
 }
 
 // Claude / OpenAI：抽帧后把帧序列 POST 给本地服务。API Key 走 header，不进 body。
-export async function analyzeFrames({ provider, model, apiKey, baseUrl, frames, focus, meta, transcript, signal }) {
+export async function analyzeFrames({ provider, model, apiKey, baseUrl, apiMode, frames, focus, meta, transcript, signal }) {
   return send('/api/frames/analyze', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
-    body: JSON.stringify({ provider, model, baseUrl, frames, focus, meta, transcript })
+    body: JSON.stringify({ provider, model, baseUrl, apiMode, frames, focus, meta, transcript })
   }, 180000, signal);
 }
 

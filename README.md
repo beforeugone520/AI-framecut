@@ -76,7 +76,18 @@ node server.js
 转写 Key 与分析引擎**同源时可留空**（自动复用上方 Key）；无音轨 / 纯音乐 / 转写失败会自动降级为画面推断，不中断分析。导出的 Markdown 会附带「音频转写全文」。
 
 默认模型可在界面里随时改成你账号可用的模型 ID：
-`gemini-2.5-flash`（默认，可换 `gemini-2.5-pro` 获得更深入分析）、`claude-sonnet-4-6`、`gpt-4o`。
+`gemini-2.5-flash`（默认，可换 `gemini-2.5-pro` 或 `gemini-3.1-pro-preview` 获得更深入分析）、`claude-sonnet-4-6`、`gpt-4o`。
+
+Claude / OpenAI 模式都支持自定义 API Base URL：留空时使用官方地址；使用兼容网关时填对应 `/v1` 基础地址。
+
+OpenAI GPT 模式支持两种接口：
+
+| API 模式 | 路径 | 适用场景 |
+| --- | --- | --- |
+| Chat Completions | `/chat/completions` | OpenAI 官方与大多数传统兼容网关 |
+| Responses | `/responses` | 只支持 Responses API 的 OpenAI 兼容网关 |
+
+> Gemini 3.1 需要填写完整模型 ID：`gemini-3.1-pro-preview`。为减少误填，服务端会把 `gemini3.1`、`gemini-3.1`、`gemini-3.1-pro` 自动按 `gemini-3.1-pro-preview` 处理。
 
 ## 项目结构
 

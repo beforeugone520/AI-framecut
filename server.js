@@ -81,16 +81,16 @@ async function handleFrames(req, res) {
   }
 
   const apiKey = req.headers['x-api-key']; // Key 只走 header，不入 body
-  const { provider, model, baseUrl, frames, focus, meta, transcript } = payload;
+  const { provider, model, baseUrl, apiMode, frames, focus, meta, transcript } = payload;
   if (!Array.isArray(frames) || frames.length === 0) {
     return sendJson(res, 400, { error: '缺少抽帧数据' });
   }
 
   let result;
   if (provider === 'claude') {
-    result = await analyzeWithClaude({ apiKey, model, frames, focus, meta, transcript });
+    result = await analyzeWithClaude({ apiKey, model, baseUrl, frames, focus, meta, transcript });
   } else if (provider === 'openai') {
-    result = await analyzeWithOpenAI({ apiKey, model, frames, focus, meta, baseUrl, transcript });
+    result = await analyzeWithOpenAI({ apiKey, model, apiMode, frames, focus, meta, baseUrl, transcript });
   } else {
     return sendJson(res, 400, { error: `不支持的 provider: ${provider}` });
   }

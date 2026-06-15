@@ -7,6 +7,7 @@ export function initUI() {
   els.provider.value = settings.provider;
   els.apiKey.value = settings.keys[settings.provider] || '';
   els.baseUrl.value = settings.baseUrl || '';
+  els.openaiMode.value = settings.openaiMode || 'chat';
   els.focus.value = settings.focus || '';
   els.maxFrames.value = settings.maxFrames || 48;
   els.maxFramesVal.textContent = els.maxFrames.value;
@@ -26,6 +27,7 @@ export function applyProvider() {
   els.apiKey.value = settings.keys[p] || '';
   els.apiKey.placeholder = `粘贴 ${conf.label} API Key`;
   els.baseUrlField.hidden = !conf.needsBaseUrl;
+  els.openaiModeField.hidden = p !== 'openai';
   const isFrames = conf.mode === 'frames';
   els.framesField.style.display = isFrames ? '' : 'none';
   els.transcribeField.style.display = isFrames ? '' : 'none';
@@ -40,6 +42,7 @@ export function persist() {
   settings.models[els.provider.value] = els.model.value.trim();
   settings.keys[els.provider.value] = els.apiKey.value.trim();
   settings.baseUrl = els.baseUrl.value.trim();
+  settings.openaiMode = els.openaiMode.value;
   settings.focus = els.focus.value.trim();
   settings.maxFrames = Number(els.maxFrames.value);
   settings.transcribeOn = els.transcribeOn.checked;

@@ -48,7 +48,16 @@
 
         <label class="field" id="baseUrlField" hidden>
           <span class="field-label">API Base URL（可选 · 兼容第三方网关）</span>
-          <input id="baseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1" />
+          <input id="baseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="留空则使用所选引擎官方地址" />
+        </label>
+
+        <label class="field" id="openaiModeField" hidden>
+          <span class="field-label">OpenAI API 模式</span>
+          <select id="openaiMode">
+            <option value="chat">Chat Completions（/chat/completions）</option>
+            <option value="responses">Responses（/responses）</option>
+          </select>
+          <span class="hint">如果兼容网关不支持 /chat/completions，请切换到 Responses。</span>
         </label>
 
         <details class="advanced">

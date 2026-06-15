@@ -10,6 +10,8 @@ export const els = {
   apiKey: $('#apiKey'),
   baseUrlField: $('#baseUrlField'),
   baseUrl: $('#baseUrl'),
+  openaiModeField: $('#openaiModeField'),
+  openaiMode: $('#openaiMode'),
   focus: $('#focus'),
   framesField: $('#framesField'),
   maxFrames: $('#maxFrames'),

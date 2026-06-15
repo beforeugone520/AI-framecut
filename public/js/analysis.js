@@ -58,6 +58,7 @@ export async function runAnalysis() {
       result = await analyzeFrames({
         provider, model, apiKey,
         baseUrl: els.baseUrl.value.trim(),
+        apiMode: provider === 'openai' ? els.openaiMode.value : '',
         frames, focus, transcript, signal,
         meta: { ...state.currentMeta, filename: state.currentFile.name }
       });
