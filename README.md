@@ -78,7 +78,7 @@ node server.js
 默认模型可在界面里随时改成你账号可用的模型 ID：
 `gemini-2.5-flash`（默认，可换 `gemini-2.5-pro` 或 `gemini-3.1-pro-preview` 获得更深入分析）、`claude-sonnet-4-6`、`gpt-4o`。
 
-Claude / OpenAI 模式都支持自定义 API Base URL：留空时使用官方地址；使用兼容网关时填对应 `/v1` 基础地址。
+Gemini / Claude / OpenAI 模式都支持自定义 API Base URL：留空时使用官方地址；使用兼容网关时填对应基础地址。Gemini 地址通常填到域名根路径即可，程序会自动拼接 `/upload/v1beta` 与 `/v1beta`。
 
 OpenAI GPT 模式支持两种接口：
 

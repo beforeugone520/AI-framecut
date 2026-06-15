@@ -1,9 +1,10 @@
 // 调用本地服务的分析接口。所有请求支持外部 AbortSignal（取消）+ 超时兜底。
 
 // Gemini：直接把原始视频文件 POST 给本地服务，由服务端转发上传到 Gemini。
-export async function analyzeVideo({ file, model, apiKey, focus, meta, signal }) {
+export async function analyzeVideo({ file, model, apiKey, baseUrl, focus, meta, signal }) {
   const params = new URLSearchParams({
     model: model || '',
+    baseUrl: baseUrl || '',
     mime: file.type || 'video/mp4',
     filename: file.name || 'upload.mp4',
     focus: focus || '',

@@ -9,7 +9,7 @@ export const PROVIDERS = {
     mode: 'video',
     hint: '原生上传整段视频，可同时分析画面与音频。Gemini 3.1 请填 gemini-3.1-pro-preview。',
     keyUrl: 'https://aistudio.google.com/app/apikey',
-    needsBaseUrl: false
+    needsBaseUrl: true
   },
   claude: {
     label: 'Anthropic Claude',

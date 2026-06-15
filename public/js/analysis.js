@@ -41,7 +41,7 @@ export async function runAnalysis() {
     let result;
     if (conf.mode === 'video') {
       setStatus('working', '正在上传视频并调用 Gemini 分析（视频较大时可能需要 1～3 分钟）…');
-      result = await analyzeVideo({ file: state.currentFile, model, apiKey, focus, meta: state.currentMeta, signal });
+      result = await analyzeVideo({ file: state.currentFile, model, apiKey, baseUrl: els.baseUrl.value.trim(), focus, meta: state.currentMeta, signal });
     } else {
       setStatus('working', '正在抽取关键帧…');
       const frames = await extractFrames(state.currentFile, {
@@ -135,7 +135,7 @@ async function runTranscription(analysisProvider, analysisKey, signal) {
         engine: engineKey,
         model: engineConf.defaultModel,
         apiKey: key,
-        baseUrl: engineKey === 'openai' ? els.baseUrl.value.trim() : '',
+        baseUrl: engineConf.provider === analysisProvider ? els.baseUrl.value.trim() : '',
         blob: seg.blob,
         signal
       });

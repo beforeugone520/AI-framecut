@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import { upstreamError, resolveEndpoint, fetchWithTimeout } from '../lib/http.js';
 import { buildAnalysisPrompt } from '../lib/prompt.js';
-import { normalizeGeminiModel } from '../lib/providers/gemini.js';
+import { analyzeWithGemini, normalizeGeminiModel } from '../lib/providers/gemini.js';
 import { analyzeWithClaude } from '../lib/providers/claude.js';
 import { analyzeWithOpenAI } from '../lib/providers/openai.js';
 
@@ -67,6 +67,48 @@ test('buildAnalysisPrompt: frames 模式注入真实转写，video 模式不注�
   assert.match(f, /\[0:00–0:03\] 你好/);
   const v = buildAnalysisPrompt({ mode: 'video', meta: {}, transcript: '忽略' });
   assert.doesNotMatch(v, /【音频转写】/);
+});
+
+test('analyzeWithGemini: 支持自定义 Gemini Base URL', async () => {
+  const origFetch = globalThis.fetch;
+  const calledUrls = [];
+  globalThis.fetch = async (url) => {
+    calledUrls.push(String(url));
+    if (String(url).endsWith('/upload/v1beta/files')) {
+      return new Response('{}', { status: 200, headers: { 'x-goog-upload-url': 'https://gemini-compatible.example/upload-session' } });
+    }
+    if (String(url) === 'https://gemini-compatible.example/upload-session') {
+      return Response.json({ file: { name: 'files/test-video', uri: 'gemini://test-video', state: 'PROCESSING' } });
+    }
+    if (String(url).endsWith('/v1beta/files/test-video')) {
+      return Response.json({ state: 'ACTIVE' });
+    }
+    if (String(url).endsWith('/v1beta/models/gemini-2.5-flash:generateContent')) {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ shots: [{ shot_number: 1, duration_sec: 1 }], style: { overall: 'ok' } }) }] } }]
+      });
+    }
+    return Response.json({ error: { message: 'unexpected url' } }, { status: 500 });
+  };
+
+  const result = await analyzeWithGemini({
+    apiKey: 'key',
+    model: 'gemini-2.5-flash',
+    baseUrl: 'https://gemini-compatible.example',
+    videoBuffer: new Uint8Array([1, 2, 3]),
+    mimeType: 'video/mp4',
+    filename: 'test.mp4',
+    meta: { duration: 1 }
+  });
+
+  assert.deepEqual(calledUrls, [
+    'https://gemini-compatible.example/upload/v1beta/files',
+    'https://gemini-compatible.example/upload-session',
+    'https://gemini-compatible.example/v1beta/files/test-video',
+    'https://gemini-compatible.example/v1beta/models/gemini-2.5-flash:generateContent'
+  ]);
+  assert.equal(result.shots.length, 1);
+  globalThis.fetch = origFetch;
 });
 
 test('analyzeWithClaude: 支持自定义 Anthropic Base URL', async () => {

@@ -54,6 +54,7 @@ async function handleGemini(req, res) {
   const q = url.searchParams;
   const apiKey = req.headers['x-api-key'];
   const model = q.get('model') || 'gemini-2.5-flash';
+  const baseUrl = q.get('baseUrl') || '';
   const mimeType = q.get('mime') || 'video/mp4';
   const filename = q.get('filename') || 'upload.mp4';
   const focus = q.get('focus') || '';
@@ -67,7 +68,7 @@ async function handleGemini(req, res) {
   const videoBuffer = await readRawBody(req, MAX_VIDEO_BYTES);
   if (!videoBuffer.length) return sendJson(res, 400, { error: '未收到视频数据' });
 
-  const result = await analyzeWithGemini({ apiKey, model, videoBuffer, mimeType, filename, focus, meta });
+  const result = await analyzeWithGemini({ apiKey, model, baseUrl, videoBuffer, mimeType, filename, focus, meta });
   sendJson(res, 200, result);
 }
 
